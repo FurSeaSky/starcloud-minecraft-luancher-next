@@ -31,4 +31,4 @@ jobs:
         run: ./gradlew test
 
       - name: Verify dependency rules
-        run: ./gradlew :core:test --tests "cn.starcloud.core.ArchitectureTest"
+        run: ./gradlew :core:test
