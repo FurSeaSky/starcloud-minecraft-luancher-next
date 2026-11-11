@@ -1,9 +1,9 @@
 .gradle/
 build/
+*.jar
 !gradle/wrapper/gradle-wrapper.jar
 out/
 dist/
-*.jar
 *.class
 .idea/
 *.iml
