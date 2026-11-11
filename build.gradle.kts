@@ -34,5 +34,5 @@ tasks.register("packageApp") {
 }
 
 tasks.named("check") {
-    dependsOn("spotlessCheck")
+    dependsOn(subprojects.map { "${it.path}:spotlessCheck" })
 }
