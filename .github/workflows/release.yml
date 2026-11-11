@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  package:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux-x64
+          - os: windows-latest
+            platform: windows-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Package
+        run: ./gradlew packageApp
+
+      - name: Archive (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cd desktop/build/dist
+          tar -czf Starcloud-${{ matrix.platform }}.tar.gz Starcloud
+
+      - name: Archive (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd desktop/build/dist
+          Compress-Archive -Path Starcloud -DestinationPath Starcloud-${{ matrix.platform }}.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Starcloud-${{ matrix.platform }}
+          path: |
+            desktop/build/dist/Starcloud-${{ matrix.platform }}.tar.gz
+            desktop/build/dist/Starcloud-${{ matrix.platform }}.zip
+          if-no-files-found: ignore
