@@ -7,7 +7,7 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
 import org.junit.jupiter.api.Test;
 
-class ArchitectureTest {
+public class ArchitectureTest {
 
   private final JavaClasses classes = new ClassFileImporter().importPackages("cn.starcloud.core");
 
