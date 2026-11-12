@@ -13,3 +13,7 @@ dependencies {
     testRuntimeOnly(libs.junit.platform.launcher)
     testImplementation("com.tngtech.archunit:archunit:1.5.0")
 }
+
+tasks.test {
+    useJUnitPlatform()
+}
