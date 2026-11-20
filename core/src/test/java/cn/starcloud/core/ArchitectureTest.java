@@ -7,6 +7,10 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.lang.ArchRule;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Guards the dependency rules of `core`: a leaked javafx, android, or awt import would make the
+ * module unusable on every other platform.
+ */
 public class ArchitectureTest {
 
   private final JavaClasses classes = new ClassFileImporter().importPackages("cn.starcloud.core");

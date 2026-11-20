@@ -1,11 +1,23 @@
 package cn.starcloud.core.auth.auths;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import cn.starcloud.core.auth.*;
+import cn.starcloud.core.auth.dto.AuthSession;
+import cn.starcloud.core.auth.dto.TokenSuccessJson;
+import cn.starcloud.core.auth.enums.AuthFailureReason;
+import cn.starcloud.core.auth.exception.AbortFlow;
+import cn.starcloud.core.auth.exception.AuthException;
+import cn.starcloud.core.auth.itfes.AuthHandle;
+import cn.starcloud.core.auth.itfes.AuthState;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -21,11 +33,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Drives the whole device code chain against a stubbed client, so every failure branch is reachable
+ * without a Microsoft account or network access.
+ */
 class MicrosoftAuthTest {
-
-  // ==================================================================
-  // 一、测试基础设施：Mock HttpClient + JSON 构造 + 状态等待
-  // ==================================================================
 
   static final class MockHttp {
     private final HttpClient client;
@@ -64,7 +76,10 @@ class MicrosoftAuthTest {
       }
     }
 
-    /** FIFO 队首必须匹配当前 URI 才消费，否则走 rules。避免设备码请求误吞 token 轮询规则。 */
+    /**
+     * Only consumes the FIFO head when it matches the URI; otherwise the device code request would
+     * swallow the stub queued for the first token poll.
+     */
     private Step pick(String uri) {
       if (!fifo.isEmpty()) {
         Step head = fifo.peek();
@@ -163,10 +178,6 @@ class MicrosoftAuthTest {
     throw new AssertionError("等待终端态超时，当前: " + handle.state());
   }
 
-  // ==================================================================
-  // 二、功能测试（JUnit 5）
-  // ==================================================================
-
   private MockHttp http;
 
   @BeforeEach
@@ -187,10 +198,10 @@ class MicrosoftAuthTest {
     return a;
   }
 
-  /** 设备码规则同时覆盖 legacy 与 modern 两个端点。 */
+  /** Registers the same stub for both endpoint families. */
   private void stubDeviceCode(int status, String body) {
-    http.on("oauth20_connect", status, body); // legacy
-    http.on("devicecode", status, body); // modern
+    http.on("oauth20_connect", status, body);
+    http.on("devicecode", status, body);
   }
 
   private static void assertFailed(AuthState s, AuthFailureReason reason) {
@@ -214,8 +225,6 @@ class MicrosoftAuthTest {
     http.on("login_with_xbox", 200, Json.mcToken(mcAt, 86400));
     http.on("minecraft/profile", 200, Json.profile(uuid, name));
   }
-
-  // ---------- 基础 API ----------
 
   @Test
   @DisplayName("clientId 为空 → INVALID_CLIENT_ID，零 HTTP 请求")
@@ -247,8 +256,6 @@ class MicrosoftAuthTest {
     MicrosoftAuth auth = newAuth("cid", true);
     assertDoesNotThrow(() -> auth.logout("token"));
   }
-
-  // ---------- 设备码阶段 ----------
 
   @Test
   @DisplayName("设备码非 200 → INVALID_CLIENT_ID")
@@ -282,8 +289,6 @@ class MicrosoftAuthTest {
     awaitTerminal(auth.login(), 30);
     assertEquals(MicrosoftAuth.LEGACY_DEVICE_CODE_URL, http.sent().get(0).uri().toString());
   }
-
-  // ---------- 轮询阶段 ----------
 
   @Test
   @DisplayName("authorization_pending ×2 后成功")
@@ -346,8 +351,6 @@ class MicrosoftAuthTest {
     assertFailed(awaitTerminal(auth.login(), 30), AuthFailureReason.INVALID_CREDENTIALS);
   }
 
-  // ---------- XBL / XSTS / MC 阶段 ----------
-
   @Test
   @DisplayName("XBL 缺 uhs → INVALID_CREDENTIALS")
   void xblMissingUhs() throws Exception {
@@ -394,8 +397,6 @@ class MicrosoftAuthTest {
     assertFailed(awaitTerminal(auth.login(), 30), AuthFailureReason.INVALID_CREDENTIALS);
   }
 
-  // ---------- 完整成功链路 ----------
-
   @Test
   @DisplayName("完整流程 → Success，Session 字段正确")
   void fullSuccessSession() throws Exception {
@@ -427,8 +428,6 @@ class MicrosoftAuthTest {
     assertTrue(http.sent().get(0).uri().toString().contains("microsoftonline.com"));
   }
 
-  // ---------- 白盒：单点方法 ----------
-
   @Test
   @DisplayName("parseError 解析正确 / 非法返回 null")
   void parseErrorDirect() {
@@ -452,12 +451,7 @@ class MicrosoftAuthTest {
     assertInstanceOf(AuthState.Failed.class, h2.state());
   }
 
-  // ==================================================================
-  // 三、HITL 测试（真实登录，手动触发）
-  // ==================================================================
-
   @Test
-  // @EnabledIfSystemProperty(named = "hitl", matches = "true")
   @DisplayName("HITL：真实设备码登录（需手动在浏览器授权）")
   void hitlRealLogin() throws Exception {
     String clientId = System.getProperty("hitl.clientId");

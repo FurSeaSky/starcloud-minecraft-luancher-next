@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import java.io.IOException;
 import org.junit.jupiter.api.Test;
 
+/** Callers show the message and the cause to the user, so both constructors must preserve them. */
 class InitExceptionTest {
 
   @Test

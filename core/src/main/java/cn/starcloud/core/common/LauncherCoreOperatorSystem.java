@@ -1,21 +1,40 @@
 package cn.starcloud.core.common;
 
 import java.util.Locale;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+/**
+ * Operating system the core is running on.
+ *
+ * <p>Detected once from {@code os.name} at class initialisation; the result is cached in {@link
+ * #getSystem()} because the platform of a process cannot change, and callers on hot paths (path
+ * resolution, file layout) should not re-read system properties.
+ */
 public enum LauncherCoreOperatorSystem {
+  /** Microsoft Windows. */
   WINDOWS,
+  /** Apple macOS. */
   MACOS,
+  /** Linux distributions other than Android and HarmonyOS. */
   LINUX,
+  /** FreeBSD. */
   FREEBSD,
+  /** Android, including devices that also report {@code linux} in {@code os.name}. */
   ANDROID,
+  /** Huawei HarmonyOS, matched before the generic Linux branch. */
   HUAWEI,
+  /** None of the above; callers must fall back to a conservative default. */
   UNKNOWN;
 
-  private static final Logger LOGGER = LogManager.getLogger(LauncherCoreOperatorSystem.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(LauncherCoreOperatorSystem.class);
   private static final LauncherCoreOperatorSystem CURRENT = detect();
 
+  /**
+   * Returns the detected platform.
+   *
+   * @return the platform of the current process
+   */
   public static LauncherCoreOperatorSystem getSystem() {
     return CURRENT;
   }
