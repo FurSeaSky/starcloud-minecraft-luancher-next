@@ -2,7 +2,6 @@ package cn.starcloud.core.download;
 
 import cn.starcloud.core.download.dto.DownloadTask;
 import cn.starcloud.core.download.enums.TaskState;
-
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;

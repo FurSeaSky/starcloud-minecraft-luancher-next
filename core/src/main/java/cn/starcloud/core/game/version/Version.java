@@ -8,7 +8,6 @@ import cn.starcloud.core.game.version.exception.VersionException;
 import cn.starcloud.core.launcherCore.LauncherCoreConsts;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
-
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -77,7 +76,8 @@ public class Version {
   }
 
   private URI buildManifestUri() {
-    String base = (isMirror ? LauncherCoreConsts.BMCLSOURCE : LauncherCoreConsts.MOJANGSOURCE).toString();
+    String base =
+        (isMirror ? LauncherCoreConsts.BMCLSOURCE : LauncherCoreConsts.MOJANGSOURCE).toString();
     while (base.endsWith("/")) {
       base = base.substring(0, base.length() - 1);
     }

@@ -1,7 +1,6 @@
 package cn.starcloud.core.launcherCore;
 
 import cn.starcloud.core.common.LauncherCorePath;
-
 import java.net.URI;
 import java.nio.file.Path;
 
@@ -17,7 +16,9 @@ public final class LauncherCoreConsts {
    * <p>Resolved eagerly at class initialisation: it reflects the environment of the process that
    * first loads this class and does not follow later changes to it.
    */
-  public static final Path BASE = LauncherCorePath.getSystemAppDataPath().resolve("StarLauncher");  /**
+  public static final Path BASE = LauncherCorePath.getSystemAppDataPath().resolve("StarLauncher");
+
+  /**
    * BMCLAPI mirror root for the launcher's metadata and file downloads.
    *
    * <p>Preferred over {@link #MOJANGSOURCE} for clients in mainland China: it mirrors Mojang's
@@ -44,13 +45,13 @@ public final class LauncherCoreConsts {
    * BMCLAPI mirror root for Maven-style library downloads.
    *
    * <p>Libraries are not served under the plain {@link #BMCLSOURCE} path: the official prefix
-   * {@code https://libraries.minecraft.net/} maps to {@code https://bmclapi2.bangbang93.com/maven/}.
-   * When rewriting a library URL from a version JSON, replace the whole official prefix with this
-   * value rather than just swapping the host.
+   * {@code https://libraries.minecraft.net/} maps to {@code
+   * https://bmclapi2.bangbang93.com/maven/}. When rewriting a library URL from a version JSON,
+   * replace the whole official prefix with this value rather than just swapping the host.
    *
    * <p>Derived from {@link #BMCLSOURCE}; value: {@code https://bmclapi2.bangbang93.com//maven/}.
    * The double slash is harmless for most HTTP clients but worth normalising if you build URLs by
    * string concatenation.
    */
-  public static final URI BMCLLIBRARYSOURCE = URI.create(BMCLSOURCE+"/maven/");
+  public static final URI BMCLLIBRARYSOURCE = URI.create(BMCLSOURCE + "/maven/");
 }

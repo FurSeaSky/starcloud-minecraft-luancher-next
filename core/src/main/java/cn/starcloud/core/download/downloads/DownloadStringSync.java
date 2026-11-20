@@ -4,20 +4,19 @@ import cn.starcloud.core.download.dto.DownloadExtraArgument;
 import cn.starcloud.core.download.dto.DownloadRequest;
 import cn.starcloud.core.download.exception.DownloadException;
 import cn.starcloud.core.download.intf.IDownload;
-
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.List;
 
-public class DownloadStringWait implements IDownload<String> {
+public class DownloadStringSync implements IDownload<String> {
   private HttpClient httpClient;
 
-  public DownloadStringWait() {
+  public DownloadStringSync() {
     this.httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
   }
 
-  public DownloadStringWait(HttpClient httpClient) {
+  public DownloadStringSync(HttpClient httpClient) {
     this.httpClient = httpClient;
   }
 
@@ -25,14 +24,14 @@ public class DownloadStringWait implements IDownload<String> {
     this.httpClient = httpClient;
   }
 
-  public String download(DownloadRequest req, DownloadExtraArgument extraArgument) throws DownloadException {
+  public String download(DownloadRequest req, DownloadExtraArgument extraArgument)
+      throws DownloadException {
     if (extraArgument == null) {
       List<DownloadExtraArgument.DownloadHead> h = List.of();
       extraArgument = new DownloadExtraArgument(DownloadExtraArgument.DownloadType.GET, h, null);
     }
 
-    HttpRequest.Builder httpBuilder = HttpRequest.newBuilder()
-        .uri(req.uri());
+    HttpRequest.Builder httpBuilder = HttpRequest.newBuilder().uri(req.uri());
 
     switch (extraArgument.type()) {
       case GET -> httpBuilder.GET();
@@ -46,7 +45,8 @@ public class DownloadStringWait implements IDownload<String> {
 
     HttpRequest httpRequest = httpBuilder.build();
     try {
-      HttpResponse<String> resp = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+      HttpResponse<String> resp =
+          httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
       if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
         throw new DownloadException("请求失败，状态码：" + resp.statusCode());
       }

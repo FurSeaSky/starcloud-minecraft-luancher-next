@@ -2,7 +2,6 @@ package cn.starcloud.core.download.dto;
 
 import cn.starcloud.core.download.enums.TaskState;
 import cn.starcloud.core.download.intf.ProgressListener;
-
 import java.util.concurrent.atomic.AtomicLong;
 
 public class DownloadTask {

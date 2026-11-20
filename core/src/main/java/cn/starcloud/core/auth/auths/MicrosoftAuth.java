@@ -16,9 +16,6 @@ import cn.starcloud.core.auth.itfes.AuthState;
 import cn.starcloud.core.auth.itfes.IAuth;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -28,6 +25,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Microsoft account login through the OAuth 2.0 device code flow.

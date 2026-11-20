@@ -1,15 +1,13 @@
 package cn.starcloud.core.download.downloads;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import cn.starcloud.core.download.DownloadHandler;
 import cn.starcloud.core.download.dto.DownloadRequest;
 import cn.starcloud.core.download.dto.DownloadTask;
 import cn.starcloud.core.download.enums.TaskState;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
@@ -21,8 +19,9 @@ import java.security.MessageDigest;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class DownloadSchedulerAsyncTest {
 
@@ -53,8 +52,9 @@ class DownloadSchedulerAsyncTest {
     Path target = tmpDir.resolve("out.txt");
     String sha1 = sha1Hex(content);
 
-    DownloadTask task = DownloadTask.fromRequest(
-        new DownloadRequest(URI.create(baseUrl + "/file"), target, sha1, null));
+    DownloadTask task =
+        DownloadTask.fromRequest(
+            new DownloadRequest(URI.create(baseUrl + "/file"), target, sha1, null));
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(2, 5000, 2, 100);
     scheduler.pushTask(task);
@@ -79,13 +79,17 @@ class DownloadSchedulerAsyncTest {
     server.createContext("/b", ex -> respond(ex, 200, b));
     server.createContext("/c", ex -> respond(ex, 200, c));
 
-    List<DownloadTask> tasks = List.of(
-        DownloadTask.fromRequest(new DownloadRequest(URI.create(baseUrl + "/a"),
-            tmpDir.resolve("a.bin"), sha1Hex(a), null)),
-        DownloadTask.fromRequest(new DownloadRequest(URI.create(baseUrl + "/b"),
-            tmpDir.resolve("b.bin"), sha1Hex(b), null)),
-        DownloadTask.fromRequest(new DownloadRequest(URI.create(baseUrl + "/c"),
-            tmpDir.resolve("c.bin"), sha1Hex(c), null)));
+    List<DownloadTask> tasks =
+        List.of(
+            DownloadTask.fromRequest(
+                new DownloadRequest(
+                    URI.create(baseUrl + "/a"), tmpDir.resolve("a.bin"), sha1Hex(a), null)),
+            DownloadTask.fromRequest(
+                new DownloadRequest(
+                    URI.create(baseUrl + "/b"), tmpDir.resolve("b.bin"), sha1Hex(b), null)),
+            DownloadTask.fromRequest(
+                new DownloadRequest(
+                    URI.create(baseUrl + "/c"), tmpDir.resolve("c.bin"), sha1Hex(c), null)));
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(2, 5000, 2, 100);
     scheduler.pushTasks(tasks);
@@ -110,13 +114,17 @@ class DownloadSchedulerAsyncTest {
     var progressCalls = new java.util.concurrent.atomic.AtomicInteger(0);
     var lastReceived = new java.util.concurrent.atomic.AtomicLong(0);
 
-    DownloadTask task = DownloadTask.fromRequest(new DownloadRequest(
-        URI.create(baseUrl + "/big"), target, null,
-        (downloaded, total) -> {
-          progressCalls.incrementAndGet();
-          lastReceived.set(downloaded);
-          assertTrue(downloaded > 0);
-        }));
+    DownloadTask task =
+        DownloadTask.fromRequest(
+            new DownloadRequest(
+                URI.create(baseUrl + "/big"),
+                target,
+                null,
+                (downloaded, total) -> {
+                  progressCalls.incrementAndGet();
+                  lastReceived.set(downloaded);
+                  assertTrue(downloaded > 0);
+                }));
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(1, 5000, 1, 100);
     scheduler.pushTask(task);
@@ -136,8 +144,9 @@ class DownloadSchedulerAsyncTest {
     server.createContext("/file", ex -> respond(ex, 200, content));
 
     Path target = tmpDir.resolve("bad.bin");
-    DownloadTask task = DownloadTask.fromRequest(new DownloadRequest(
-        URI.create(baseUrl + "/file"), target, "deadbeef", null));
+    DownloadTask task =
+        DownloadTask.fromRequest(
+            new DownloadRequest(URI.create(baseUrl + "/file"), target, "deadbeef", null));
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(1, 5000, 1, 50);
     scheduler.pushTask(task);
@@ -155,14 +164,17 @@ class DownloadSchedulerAsyncTest {
   @Test
   void non2xxFailsWithoutRetry() throws Exception {
     var hits = new java.util.concurrent.atomic.AtomicInteger(0);
-    server.createContext("/missing", ex -> {
-      hits.incrementAndGet();
-      respond(ex, 404, "not found".getBytes(StandardCharsets.UTF_8));
-    });
+    server.createContext(
+        "/missing",
+        ex -> {
+          hits.incrementAndGet();
+          respond(ex, 404, "not found".getBytes(StandardCharsets.UTF_8));
+        });
 
     Path target = tmpDir.resolve("missing.bin");
-    DownloadTask task = DownloadTask.fromRequest(
-        new DownloadRequest(URI.create(baseUrl + "/missing"), target, null, null));
+    DownloadTask task =
+        DownloadTask.fromRequest(
+            new DownloadRequest(URI.create(baseUrl + "/missing"), target, null, null));
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(1, 5000, 3, 50);
     scheduler.pushTask(task);
@@ -178,18 +190,21 @@ class DownloadSchedulerAsyncTest {
   @Test
   void retriesOnTransientFailure() throws Exception {
     var hits = new java.util.concurrent.atomic.AtomicInteger(0);
-    server.createContext("/flaky", ex -> {
-      int n = hits.incrementAndGet();
-      if (n < 3) {
-        respond(ex, 500, "boom".getBytes(StandardCharsets.UTF_8));
-      } else {
-        respond(ex, 200, "ok".getBytes(StandardCharsets.UTF_8));
-      }
-    });
+    server.createContext(
+        "/flaky",
+        ex -> {
+          int n = hits.incrementAndGet();
+          if (n < 3) {
+            respond(ex, 500, "boom".getBytes(StandardCharsets.UTF_8));
+          } else {
+            respond(ex, 200, "ok".getBytes(StandardCharsets.UTF_8));
+          }
+        });
 
     Path target = tmpDir.resolve("flaky.bin");
-    DownloadTask task = DownloadTask.fromRequest(
-        new DownloadRequest(URI.create(baseUrl + "/flaky"), target, null, null));
+    DownloadTask task =
+        DownloadTask.fromRequest(
+            new DownloadRequest(URI.create(baseUrl + "/flaky"), target, null, null));
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(1, 5000, 5, 50);
     scheduler.pushTask(task);
@@ -209,8 +224,10 @@ class DownloadSchedulerAsyncTest {
   void cancelBeforeStartSkipsTask() throws Exception {
     server.createContext("/file", ex -> respond(ex, 200, "x".getBytes(StandardCharsets.UTF_8)));
 
-    DownloadTask task = DownloadTask.fromRequest(
-        new DownloadRequest(URI.create(baseUrl + "/file"), tmpDir.resolve("x.bin"), null, null));
+    DownloadTask task =
+        DownloadTask.fromRequest(
+            new DownloadRequest(
+                URI.create(baseUrl + "/file"), tmpDir.resolve("x.bin"), null, null));
     task.cancel();
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(1, 5000, 1, 50);
@@ -227,24 +244,28 @@ class DownloadSchedulerAsyncTest {
   @Test
   void cancelDuringDownloadInterruptsAndKeepsCancelledState() throws Exception {
     // 慢响应：分块写，每块间隔 50ms，让 cancel 有时间插入
-    server.createContext("/slow", ex -> {
-      ex.sendResponseHeaders(200, 0); // chunked
-      OutputStream os = ex.getResponseBody();
-      try {
-        for (int i = 0; i < 40; i++) {
-          os.write(new byte[1024]);
-          os.flush();
-          Thread.sleep(50);
-        }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      } finally {
-        os.close();
-      }
-    });
+    server.createContext(
+        "/slow",
+        ex -> {
+          ex.sendResponseHeaders(200, 0); // chunked
+          OutputStream os = ex.getResponseBody();
+          try {
+            for (int i = 0; i < 40; i++) {
+              os.write(new byte[1024]);
+              os.flush();
+              Thread.sleep(50);
+            }
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          } finally {
+            os.close();
+          }
+        });
 
-    DownloadTask task = DownloadTask.fromRequest(
-        new DownloadRequest(URI.create(baseUrl + "/slow"), tmpDir.resolve("slow.bin"), null, null));
+    DownloadTask task =
+        DownloadTask.fromRequest(
+            new DownloadRequest(
+                URI.create(baseUrl + "/slow"), tmpDir.resolve("slow.bin"), null, null));
 
     DownloadSchedulerAsync scheduler = new DownloadSchedulerAsync(1, 10000, 1, 50);
     scheduler.pushTask(task);

@@ -1,7 +1,6 @@
 package cn.starcloud.core.launcherCore;
 
 import java.io.IOException;
-import java.net.URI;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
@@ -27,7 +26,6 @@ public class LauncherCore implements ILauncherCore {
   public void setMirror(boolean isMirror) {
     this.isMirror = isMirror;
   }
-
 
   /**
    * Returns the single instance.

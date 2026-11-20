@@ -6,10 +6,9 @@ class DownloadWaitTest {
 
   @Test
   void download() {
-      DownloadWait downloadWait = new DownloadWait();
+    DownloadWait downloadWait = new DownloadWait();
   }
 
   @Test
-  void testDownload() {
-  }
+  void testDownload() {}
 }

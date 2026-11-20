@@ -1,7 +1,6 @@
 package cn.starcloud.core.download.intf;
 
 import cn.starcloud.core.download.dto.DownloadRequest;
-import cn.starcloud.core.download.dto.DownloadResult;
 import cn.starcloud.core.download.exception.DownloadException;
 
 public interface IDownload<T> {

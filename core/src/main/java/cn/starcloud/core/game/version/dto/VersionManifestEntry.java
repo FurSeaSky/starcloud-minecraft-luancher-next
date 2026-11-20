@@ -10,6 +10,7 @@ public record VersionManifestEntry(
     int complianceLevel) {
   @Override
   public String toString() {
-    return "id:%s,type:%s,url:%s,time:%s,releaaseTime:%s,sha1:%s,complianceLevel:%d".formatted(id, type,url,time,releaseTime,sha1,complianceLevel);
+    return "id:%s,type:%s,url:%s,time:%s,releaaseTime:%s,sha1:%s,complianceLevel:%d"
+        .formatted(id, type, url, time, releaseTime, sha1, complianceLevel);
   }
 }

@@ -34,9 +34,7 @@ public record VersionDetail(
       String url,
       Map<String, JsonElement> natives) {
 
-    public record LibraryDownloads(
-        DownloadInfo artifact,
-        Map<String, DownloadInfo> classifiers) {}
+    public record LibraryDownloads(DownloadInfo artifact, Map<String, DownloadInfo> classifiers) {}
   }
 
   public record Rule(String action, Os os, Map<String, Boolean> features) {

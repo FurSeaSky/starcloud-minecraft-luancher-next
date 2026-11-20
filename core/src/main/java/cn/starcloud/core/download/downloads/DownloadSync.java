@@ -5,7 +5,6 @@ import cn.starcloud.core.download.dto.DownloadRequest;
 import cn.starcloud.core.download.dto.DownloadResult;
 import cn.starcloud.core.download.exception.DownloadException;
 import cn.starcloud.core.download.intf.IDownload;
-
 import java.io.OutputStream;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -13,14 +12,14 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.util.List;
 
-public class DownloadWait implements IDownload<DownloadResult> {
+public class DownloadSync implements IDownload<DownloadResult> {
   private HttpClient httpClient;
 
-  public DownloadWait() {
+  public DownloadSync() {
     this.httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
   }
 
-  public DownloadWait(HttpClient httpClient) {
+  public DownloadSync(HttpClient httpClient) {
     this.httpClient = httpClient;
   }
 
@@ -28,13 +27,13 @@ public class DownloadWait implements IDownload<DownloadResult> {
     this.httpClient = httpClient;
   }
 
-  public DownloadResult download(DownloadRequest req, DownloadExtraArgument extraArgument) throws DownloadException {
+  public DownloadResult download(DownloadRequest req, DownloadExtraArgument extraArgument)
+      throws DownloadException {
     if (extraArgument == null) {
       List<DownloadExtraArgument.DownloadHead> h = List.of();
-      extraArgument = new DownloadExtraArgument(DownloadExtraArgument.DownloadType.GET, h,null);
+      extraArgument = new DownloadExtraArgument(DownloadExtraArgument.DownloadType.GET, h, null);
     }
-    HttpRequest.Builder httpBuilder = HttpRequest.newBuilder()
-        .uri(req.uri());
+    HttpRequest.Builder httpBuilder = HttpRequest.newBuilder().uri(req.uri());
 
     // 改用switch，抛弃反射
     switch (extraArgument.type()) {
@@ -49,12 +48,13 @@ public class DownloadWait implements IDownload<DownloadResult> {
 
     HttpRequest httpRequest = httpBuilder.build();
     try {
-      HttpResponse<java.io.InputStream> resp = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
+      HttpResponse<java.io.InputStream> resp =
+          httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
       if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
         throw new DownloadException("请求失败，状态码：" + resp.statusCode());
       }
       try (java.io.InputStream in = resp.body();
-           OutputStream out = Files.newOutputStream(req.target())) {
+          OutputStream out = Files.newOutputStream(req.target())) {
         byte[] buf = new byte[8192];
         int len;
         while ((len = in.read(buf)) != -1) {

@@ -7,9 +7,6 @@ import cn.starcloud.core.download.enums.TaskState;
 import cn.starcloud.core.download.exception.DownloadException;
 import cn.starcloud.core.download.intf.IDownload;
 import cn.starcloud.core.download.intf.ProgressListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -33,6 +30,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
   private static final Logger log = LoggerFactory.getLogger(DownloadSchedulerAsync.class);
@@ -51,13 +50,18 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
   private ExecutorService workerPool;
   private volatile boolean started = false;
 
-  public DownloadSchedulerAsync(int maxConcurrency, int timeoutMs, int maxRetry, long retryDelayMs) {
-    this(maxConcurrency, timeoutMs, maxRetry, retryDelayMs,
+  public DownloadSchedulerAsync(
+      int maxConcurrency, int timeoutMs, int maxRetry, long retryDelayMs) {
+    this(
+        maxConcurrency,
+        timeoutMs,
+        maxRetry,
+        retryDelayMs,
         HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMs)).build());
   }
 
-  public DownloadSchedulerAsync(int maxConcurrency, int timeoutMs, int maxRetry, long retryDelayMs,
-                                HttpClient httpClient) {
+  public DownloadSchedulerAsync(
+      int maxConcurrency, int timeoutMs, int maxRetry, long retryDelayMs, HttpClient httpClient) {
     this.maxConcurrency = maxConcurrency;
     this.timeoutMs = timeoutMs;
     this.maxRetry = maxRetry;
@@ -105,8 +109,10 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     for (int i = 0; i < maxConcurrency; i++) {
       workerPool.submit(() -> workerLoop(handler));
     }
-    log.info("Download scheduler started, maxConcurrency={}, taskCount={}",
-        maxConcurrency, taskSnapshot.size());
+    log.info(
+        "Download scheduler started, maxConcurrency={}, taskCount={}",
+        maxConcurrency,
+        taskSnapshot.size());
     return handler;
   }
 
@@ -131,10 +137,13 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
         }
         task.setState(TaskState.RUNNING);
         try {
-          runWithRetry(() -> {
-            processSingleTask(task, handler);
-            return null;
-          }, maxRetry, retryDelayMs);
+          runWithRetry(
+              () -> {
+                processSingleTask(task, handler);
+                return null;
+              },
+              maxRetry,
+              retryDelayMs);
         } catch (Exception e) {
           fillFailed(task, e.getMessage() == null ? e.toString() : e.getMessage());
         } finally {
@@ -165,9 +174,8 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     Path partPath = targetPath.resolveSibling(targetPath.getFileName() + ".part");
     long existLen = Files.exists(partPath) ? Files.size(partPath) : 0L;
 
-    HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
-        .uri(uri)
-        .timeout(Duration.ofMillis(timeoutMs));
+    HttpRequest.Builder reqBuilder =
+        HttpRequest.newBuilder().uri(uri).timeout(Duration.ofMillis(timeoutMs));
     if (existLen > 0) {
       reqBuilder.header("Range", "bytes=" + existLen + "-");
     }
@@ -213,8 +221,12 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     }
 
     try (InputStream is = resp.body();
-         FileChannel outCh = FileChannel.open(partPath,
-             StandardOpenOption.CREATE, StandardOpenOption.WRITE, StandardOpenOption.APPEND)) {
+        FileChannel outCh =
+            FileChannel.open(
+                partPath,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.WRITE,
+                StandardOpenOption.APPEND)) {
       byte[] buf = new byte[BUF_SIZE];
       int read;
       while ((read = is.read(buf)) != -1) {
@@ -242,8 +254,8 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
       throw new IOException("sha1 mismatch, expected: " + expectedSha1 + ", actual: " + actualSha1);
     }
 
-    Files.move(partPath, targetPath, StandardCopyOption.ATOMIC_MOVE,
-        StandardCopyOption.REPLACE_EXISTING);
+    Files.move(
+        partPath, targetPath, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
     task.setState(TaskState.SUCCESS);
     log.info("Download success: {}", targetPath);
   }
@@ -294,7 +306,8 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
         if (attempt > maxRetry || !isRetryable(e)) {
           throw e;
         }
-        log.warn("Action failed, will retry, attempt={}/{}, delay={}ms", attempt, maxRetry, delayMs, e);
+        log.warn(
+            "Action failed, will retry, attempt={}/{}, delay={}ms", attempt, maxRetry, delayMs, e);
         TimeUnit.MILLISECONDS.sleep(delayMs);
       }
     }
