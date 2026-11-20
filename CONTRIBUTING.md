@@ -174,7 +174,7 @@ Single module:
 Single test class:
 
 ```bash
-./gradlew :core:test --tests "cn.starcloud.core.auth.OfflineUuidTest"
+./gradlew :core:test --tests "cn.starcloud.core.auth.auths.OfflineAuthTest"
 ```
 
 ### 打包 / Package
