@@ -1,4 +1,4 @@
-package cn.starcloud.core.auth;
+package cn.starcloud.core.auth.auths;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -7,6 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import cn.starcloud.core.auth.dto.AuthSession;
+import cn.starcloud.core.auth.enums.AuthFailureReason;
+import cn.starcloud.core.auth.exception.AuthException;
+import cn.starcloud.core.auth.itfes.AuthState;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,6 +19,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 
+/**
+ * The handle is the only channel a flow has to the UI, so replay, terminal completion, and
+ * cancellation are all pinned here.
+ */
 class DefaultAuthHandleTest {
 
   private static final AuthSession SESSION =

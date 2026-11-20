@@ -1,8 +1,24 @@
 package cn.starcloud.core.auth.auths;
 
-import cn.starcloud.core.auth.*;
+import cn.starcloud.core.auth.dto.AuthSession;
+import cn.starcloud.core.auth.dto.DeviceCodeJson;
+import cn.starcloud.core.auth.dto.MinecraftProfileJson;
+import cn.starcloud.core.auth.dto.MinecraftTokenJson;
+import cn.starcloud.core.auth.dto.TokenErrorJson;
+import cn.starcloud.core.auth.dto.TokenSuccessJson;
+import cn.starcloud.core.auth.dto.XblTokenJson;
+import cn.starcloud.core.auth.dto.XstsTokenJson;
+import cn.starcloud.core.auth.enums.AuthFailureReason;
+import cn.starcloud.core.auth.exception.AbortFlow;
+import cn.starcloud.core.auth.exception.AuthException;
+import cn.starcloud.core.auth.itfes.AuthHandle;
+import cn.starcloud.core.auth.itfes.AuthState;
+import cn.starcloud.core.auth.itfes.IAuth;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -12,63 +28,146 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
+/**
+ * Microsoft account login through the OAuth 2.0 device code flow.
+ *
+ * <p>The flow is a chain of token exchanges: Microsoft token, Xbox Live token, XSTS token,
+ * Minecraft token, then the profile. Each step feeds the next, and the whole chain runs on a
+ * virtual thread so {@link #login()} returns immediately with a handle the caller can observe or
+ * cancel.
+ *
+ * <p>Configure {@link #clientId} (required) and {@link #isLegacy} before logging in.
+ */
 public class MicrosoftAuth implements IAuth {
 
-  public static final Logger LOG = LogManager.getLogger(MicrosoftAuth.class);
+  /** Logger of the flow; public so callers can route its output with their own configuration. */
+  public static final Logger LOG = LoggerFactory.getLogger(MicrosoftAuth.class);
+
+  /** Shared parser with default settings, so response mapping does not allocate per request. */
   public static final Gson GSON = new Gson();
+
+  /**
+   * Client used for every request of the flow.
+   *
+   * <p>Static and mutable so tests can install a stub; production code should leave the default.
+   */
   public static HttpClient httpClient = HttpClient.newHttpClient();
 
+  /** live.com device code endpoint, used while {@link #isLegacy} is {@code true}. */
   public static final String LEGACY_DEVICE_CODE_URL = "https://login.live.com/oauth20_connect.srf";
+
+  /** live.com token endpoint, used while {@link #isLegacy} is {@code true}. */
   public static final String LEGACY_TOKEN_URL = "https://login.live.com/oauth20_token.srf";
+
+  /** Scope requested from the legacy endpoint; grants the Xbox Live audience directly. */
   public static final String LEGACY_SCOPE = "service::user.auth.xboxlive.com::MBI_SSL";
 
+  /** microsoftonline.com device code endpoint, used while {@link #isLegacy} is {@code false}. */
   public static final String MODERN_DEVICE_CODE_URL =
       "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode";
+
+  /** microsoftonline.com token endpoint, used while {@link #isLegacy} is {@code false}. */
   public static final String MODERN_TOKEN_URL =
       "https://login.microsoftonline.com/consumers/oauth2/v2.0/token";
+
+  /**
+   * Scope requested from the modern endpoint; {@code offline_access} is what yields a refresh
+   * token.
+   */
   public static final String MODERN_SCOPE = "XboxLive.signin offline_access";
 
+  /** Xbox Live user authentication endpoint. */
   public static final String XBL_URL = "https://user.auth.xboxlive.com/user/authenticate";
+
+  /** XSTS authorization endpoint, the last step before a Minecraft token. */
   public static final String XSTS_URL = "https://xsts.auth.xboxlive.com/xsts/authorize";
+
+  /** Minecraft services endpoint that trades an XSTS token for a Minecraft access token. */
   public static final String MC_LOGIN_URL =
       "https://api.minecraftservices.com/authentication/login_with_xbox";
+
+  /** Minecraft services endpoint returning the profile (name and uuid) of the token owner. */
   public static final String MC_PROFILE_URL = "https://api.minecraftservices.com/minecraft/profile";
 
+  /** Seconds added to the poll interval when the provider answers {@code slow_down}. */
   public static final long SLOW_DOWN_INCREMENT_SECONDS = 5;
 
+  /** Microsoft client id; {@link #login()} fails fast when it is null or empty. */
   public volatile String clientId;
+
+  /**
+   * Whether to use the legacy live.com endpoints; mirrors what the configured client id accepts.
+   */
   public boolean isLegacy = true;
 
-  /** 测试专用：注入桩客户端；传 null 恢复默认真实客户端。 */
+  /** Creates an unconfigured instance; set {@link #clientId} before calling {@link #login()}. */
+  public MicrosoftAuth() {}
+
+  /**
+   * Replaces the HTTP client used by the flow.
+   *
+   * @param client stub client, or {@code null} to restore a default client
+   */
   public static void setHttpClientForTest(HttpClient client) {
     httpClient = (client == null) ? HttpClient.newHttpClient() : client;
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * @throws AuthException always; renewal is not implemented yet
+   */
   @Override
   public AuthSession refresh(String refreshToken) throws AuthException {
     throw new AuthException("refresh not implemented yet");
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>No-op: the flow has no revocation call yet, so the local session is simply dropped.
+   */
   @Override
-  public void logout(String accessToken) throws AuthException {
-    // no-op: logout not implemented
-  }
+  public void logout(String accessToken) throws AuthException {}
 
+  /**
+   * Sets the Microsoft client id used by the next login.
+   *
+   * @param clientId client id of the registered application
+   */
   public void setClientID(String clientId) {
     this.clientId = clientId;
   }
 
+  /**
+   * Selects the endpoint family.
+   *
+   * @param legacy {@code true} for the live.com endpoints, {@code false} for microsoftonline.com
+   */
   public void setLegacy(boolean legacy) {
     this.isLegacy = legacy;
   }
 
+  /**
+   * Percent-encodes a value for an {@code application/x-www-form-urlencoded} body.
+   *
+   * @param s value to encode
+   * @return the encoded value
+   */
   public static String encode(String s) {
     return URLEncoder.encode(s, StandardCharsets.UTF_8);
   }
 
+  /**
+   * Starts the login and returns immediately.
+   *
+   * <p>Side effect: when a client id is configured, starts a virtual thread named {@code
+   * ms-auth-poll} that drives the flow and reports through the returned handle.
+   *
+   * @return handle reporting {@link AuthState.WaitingForUser}, then success or failure; already
+   *     failed with {@link AuthFailureReason#INVALID_CLIENT_ID} when no client id is set
+   */
   @Override
   public AuthHandle login() {
     DefaultAuthHandle handle = new DefaultAuthHandle();
@@ -84,6 +183,14 @@ public class MicrosoftAuth implements IAuth {
     return handle;
   }
 
+  /**
+   * Runs the whole chain on the calling thread and reports every step to {@code handle}.
+   *
+   * <p>Every step reports its own failure before aborting, so the terminal state is already set
+   * when {@link AbortFlow} unwinds here.
+   *
+   * @param handle handle receiving the transitions
+   */
   public void runFlow(DefaultAuthHandle handle) {
     try {
       DeviceCodeJson codeJson = requestDeviceCode(handle);
@@ -115,13 +222,18 @@ public class MicrosoftAuth implements IAuth {
       LOG.info("AuthSession assembled: username={}, uuid={}", profile.name(), profile.id());
       handle.update(new AuthState.Success(session));
     } catch (AbortFlow ignored) {
-      // state already updated
+      // The failing step already reported the terminal state.
     } catch (Exception e) {
       LOG.error("Unexpected error in device code flow", e);
       handle.update(new AuthState.Failed(AuthFailureReason.UNKNOWN, e));
     }
   }
 
+  /**
+   * Builds the device code request for the configured endpoint family.
+   *
+   * @return the unsigned form-encoded request
+   */
   public HttpRequest buildDeviceCodeRequest() {
     String deviceCodeUrl = isLegacy ? LEGACY_DEVICE_CODE_URL : MODERN_DEVICE_CODE_URL;
     String scope = isLegacy ? LEGACY_SCOPE : MODERN_SCOPE;
@@ -138,6 +250,12 @@ public class MicrosoftAuth implements IAuth {
         .build();
   }
 
+  /**
+   * Builds a token poll request for the given device code.
+   *
+   * @param deviceCode code returned by the device code endpoint
+   * @return the unsigned form-encoded request
+   */
   public HttpRequest buildTokenRequest(String deviceCode) {
     String tokenUrl = isLegacy ? LEGACY_TOKEN_URL : MODERN_TOKEN_URL;
     return HttpRequest.newBuilder()
@@ -153,6 +271,14 @@ public class MicrosoftAuth implements IAuth {
         .build();
   }
 
+  /**
+   * Requests a device code, the first step of the flow.
+   *
+   * @param handle handle to report failures to
+   * @return the parsed device code response
+   * @throws AbortFlow when the request fails, the status is not 200, or required fields are
+   *     missing; the handle has already been moved to the matching failure state
+   */
   public DeviceCodeJson requestDeviceCode(DefaultAuthHandle handle) {
     HttpRequest req = buildDeviceCodeRequest();
 
@@ -206,6 +332,17 @@ public class MicrosoftAuth implements IAuth {
     return codeJson;
   }
 
+  /**
+   * Polls the token endpoint until the user finishes, the code expires, or the poll fails.
+   *
+   * <p>Blocks for as long as the flow lives, honouring the provider's interval and its {@code
+   * slow_down} back-off. Only a successful poll returns; every other outcome throws.
+   *
+   * @param handle handle to report failures to
+   * @param codeJson device code response that sets the deadline and the initial interval
+   * @return the Microsoft token response
+   * @throws AbortFlow on cancellation, expiration, rejection, or network failure
+   */
   public TokenSuccessJson pollForToken(DefaultAuthHandle handle, DeviceCodeJson codeJson) {
     Instant deadline = Instant.now().plusSeconds(codeJson.expiresIn());
     long intervalSeconds = Math.max(1, codeJson.interval());
@@ -257,6 +394,13 @@ public class MicrosoftAuth implements IAuth {
     throw new AbortFlow();
   }
 
+  /**
+   * Sleeps between polls, turning an interrupt into a cancellation.
+   *
+   * @param handle handle to report failures to
+   * @param intervalSeconds seconds to sleep
+   * @throws AbortFlow when the sleep is interrupted; the interrupt flag is restored
+   */
   public void sleepOrAbort(DefaultAuthHandle handle, long intervalSeconds) {
     try {
       TimeUnit.SECONDS.sleep(intervalSeconds);
@@ -270,6 +414,14 @@ public class MicrosoftAuth implements IAuth {
     }
   }
 
+  /**
+   * Sends one token poll.
+   *
+   * @param handle handle to report failures to
+   * @param deviceCode code being polled
+   * @return the raw response, whatever its status
+   * @throws AbortFlow on network failure or interruption
+   */
   public HttpResponse<String> sendTokenPoll(DefaultAuthHandle handle, String deviceCode) {
     HttpRequest req = buildTokenRequest(deviceCode);
     try {
@@ -288,6 +440,14 @@ public class MicrosoftAuth implements IAuth {
     }
   }
 
+  /**
+   * Parses a successful token response.
+   *
+   * @param handle handle to report failures to
+   * @param body response body of a 200 poll
+   * @return the parsed token
+   * @throws AbortFlow when the body is not valid JSON or carries no access token
+   */
   public TokenSuccessJson parseTokenSuccess(DefaultAuthHandle handle, String body) {
     TokenSuccessJson msToken;
     try {
@@ -310,6 +470,14 @@ public class MicrosoftAuth implements IAuth {
     return msToken;
   }
 
+  /**
+   * Exchanges the Microsoft token for an Xbox Live token.
+   *
+   * @param handle handle to report failures to
+   * @param msAccessToken Microsoft access token
+   * @return the Xbox Live token response
+   * @throws AbortFlow when the exchange fails or the response lacks a token or user hash
+   */
   public XblTokenJson exchangeXbl(DefaultAuthHandle handle, String msAccessToken) {
     String body =
         "{\"Properties\":{\"AuthMethod\":\"RPS\",\"SiteName\":\"user.auth.xboxlive.com\","
@@ -333,6 +501,14 @@ public class MicrosoftAuth implements IAuth {
     return xbl;
   }
 
+  /**
+   * Exchanges the Xbox Live token for an XSTS token.
+   *
+   * @param handle handle to report failures to
+   * @param xblToken Xbox Live token
+   * @return the XSTS token response
+   * @throws AbortFlow when the exchange fails or the response lacks a token
+   */
   public XstsTokenJson exchangeXsts(DefaultAuthHandle handle, String xblToken) {
     String body =
         "{\"Properties\":{\"SandboxId\":\"RETAIL\","
@@ -351,6 +527,15 @@ public class MicrosoftAuth implements IAuth {
     return xsts;
   }
 
+  /**
+   * Exchanges the XSTS token for a Minecraft token.
+   *
+   * @param handle handle to report failures to
+   * @param uhs user hash from the Xbox Live claims
+   * @param xstsToken XSTS token
+   * @return the Minecraft token response
+   * @throws AbortFlow when the exchange fails or the response lacks an access token
+   */
   public MinecraftTokenJson loginMinecraft(DefaultAuthHandle handle, String uhs, String xstsToken) {
     String body = "{\"identityToken\":\"XBL3.0 x=" + uhs + ";" + xstsToken + "\"}";
     MinecraftTokenJson mcToken =
@@ -366,6 +551,14 @@ public class MicrosoftAuth implements IAuth {
     return mcToken;
   }
 
+  /**
+   * Fetches the profile of the account owning the Minecraft token.
+   *
+   * @param handle handle to report failures to
+   * @param mcAccessToken Minecraft access token
+   * @return the profile response
+   * @throws AbortFlow when the request fails or the profile lacks an id or name
+   */
   public MinecraftProfileJson fetchProfile(DefaultAuthHandle handle, String mcAccessToken) {
     HttpRequest req =
         HttpRequest.newBuilder()
@@ -383,6 +576,13 @@ public class MicrosoftAuth implements IAuth {
     return profile;
   }
 
+  /**
+   * Builds a JSON POST request.
+   *
+   * @param url absolute target URL
+   * @param body JSON body, sent as-is
+   * @return the request
+   */
   public HttpRequest buildJsonPost(String url, String body) {
     return HttpRequest.newBuilder()
         .uri(URI.create(url))
@@ -392,6 +592,17 @@ public class MicrosoftAuth implements IAuth {
         .build();
   }
 
+  /**
+   * Sends a request, checks the status, and parses the JSON body.
+   *
+   * @param <T> response type
+   * @param handle handle to report failures to
+   * @param req request to send
+   * @param type class to deserialise the body into
+   * @param step step name used in log and error messages
+   * @return the parsed body, possibly {@code null} when the body is JSON {@code null}
+   * @throws AbortFlow on network failure, interruption, a non-200 status, or malformed JSON
+   */
   public <T> T sendJson(DefaultAuthHandle handle, HttpRequest req, Class<T> type, String step) {
     HttpResponse<String> response;
     try {
@@ -426,6 +637,12 @@ public class MicrosoftAuth implements IAuth {
     }
   }
 
+  /**
+   * Extracts the error code from a token endpoint body.
+   *
+   * @param body response body, expected to be a {@link TokenErrorJson}
+   * @return the error code, or {@code null} when the body is unparsable or has no error
+   */
   public static String parseError(String body) {
     try {
       TokenErrorJson err = GSON.fromJson(body, TokenErrorJson.class);

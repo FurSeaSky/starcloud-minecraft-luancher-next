@@ -1,4 +1,4 @@
-package cn.starcloud.core.auth;
+package cn.starcloud.core.auth.auths;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -8,7 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import cn.starcloud.core.auth.auths.OfflineAuth;
+import cn.starcloud.core.auth.dto.AuthSession;
+import cn.starcloud.core.auth.enums.AuthFailureReason;
+import cn.starcloud.core.auth.exception.AuthException;
+import cn.starcloud.core.auth.itfes.AuthHandle;
+import cn.starcloud.core.auth.itfes.AuthState;
 import java.time.Instant;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -16,6 +20,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+/**
+ * Pins the username rules and the derived UUID: servers identify offline players by that UUID, so a
+ * change would silently rename every existing account.
+ */
 class OfflineAuthTest {
 
   /** Bounded so a broken implementation fails instead of blocking the build. */
