@@ -12,6 +12,14 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * Access to the list of published Minecraft versions.
+ *
+ * <p>Reads the manifest from the configured source and caches it for the lifetime of the instance:
+ * the manifest changes a few times a year, so refetching it per lookup would cost a request for
+ * every call. Switching source discards the cache because the two sources can disagree on what
+ * exists.
+ */
 public class Version {
   private static final String MANIFEST_PATH = "/mc/game/version_manifest_v2.json";
 
@@ -21,14 +29,30 @@ public class Version {
   private volatile boolean isMirror = true;
   private volatile List<VersionManifestEntry> cachedVersions = null;
 
+  /** Creates an instance that reads from the mirror and holds no cached manifest yet. */
+  public Version() {}
+
+  /**
+   * Selects which source the manifest is read from.
+   *
+   * @param mirror {@code true} to use the BMCLAPI mirror, {@code false} for Mojang's official
+   *     endpoint
+   */
   public void setMirror(boolean mirror) {
     if (this.isMirror == mirror) {
       return;
     }
     this.isMirror = mirror;
-    this.cachedVersions = null; // 切源清缓存
+    // The cached list came from the previous source and may contain entries the new one lacks.
+    this.cachedVersions = null;
   }
 
+  /**
+   * Returns the published versions, fetching the manifest on first use.
+   *
+   * @return the version entries in manifest order
+   * @throws VersionException when the manifest cannot be fetched, parsed or is empty
+   */
   public List<VersionManifestEntry> getVersionList() {
     List<VersionManifestEntry> local = cachedVersions;
     if (local != null) {
@@ -50,6 +74,12 @@ public class Version {
     return versions;
   }
 
+  /**
+   * Looks up one version by its identifier.
+   *
+   * @param id version id such as {@code 1.21.4}
+   * @return the matching entry, {@code null} when {@code id} is {@code null} or not published
+   */
   public VersionManifestEntry getVersionInfoByID(String id) {
     if (id == null) {
       return null;
@@ -62,6 +92,12 @@ public class Version {
     return null;
   }
 
+  /**
+   * Returns every version of one release channel.
+   *
+   * @param type manifest type such as {@code release} or {@code snapshot}
+   * @return matching entries, empty when {@code type} is {@code null} or matches nothing
+   */
   public List<VersionManifestEntry> getVersionsByType(String type) {
     List<VersionManifestEntry> result = new ArrayList<>();
     if (type == null) {
@@ -78,6 +114,7 @@ public class Version {
   private URI buildManifestUri() {
     String base =
         (isMirror ? LauncherCoreConsts.BMCLSOURCE : LauncherCoreConsts.MOJANGSOURCE).toString();
+    // The constants end with a slash, the path starts with one; trimming keeps the URI valid.
     while (base.endsWith("/")) {
       base = base.substring(0, base.length() - 1);
     }

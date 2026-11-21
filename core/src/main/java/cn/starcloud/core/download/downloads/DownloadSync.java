@@ -12,21 +12,48 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.util.List;
 
+/**
+ * Blocking single-file download that writes the payload to disk.
+ *
+ * <p>Streams straight into the target file rather than buffering in memory, which is what makes it
+ * usable for multi-megabyte game jars. Because it writes in place it cannot verify or resume a
+ * partial transfer; use {@link DownloadSchedulerAsync} when the payload needs a checksum.
+ */
 public class DownloadSync implements IDownload<DownloadResult> {
   private HttpClient httpClient;
 
+  /** Creates a downloader with a default client that follows redirects. */
   public DownloadSync() {
     this.httpClient = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build();
   }
 
+  /**
+   * Creates a downloader that reuses an existing client.
+   *
+   * @param httpClient client to send requests with, typically one carrying a shared connection pool
+   */
   public DownloadSync(HttpClient httpClient) {
     this.httpClient = httpClient;
   }
 
+  /**
+   * Replaces the client used for subsequent downloads.
+   *
+   * @param httpClient the new client
+   */
   public void setHttpClient(HttpClient httpClient) {
     this.httpClient = httpClient;
   }
 
+  /**
+   * Downloads {@code req} and reports the resulting file.
+   *
+   * @param req what to download
+   * @param extraArgument method, headers and body to send, {@code null} for a plain {@code GET}
+   * @return the written file and its size
+   * @throws DownloadException when the status is not 2xx or the transfer fails; the target may be
+   *     left partially written
+   */
   public DownloadResult download(DownloadRequest req, DownloadExtraArgument extraArgument)
       throws DownloadException {
     if (extraArgument == null) {
@@ -35,11 +62,10 @@ public class DownloadSync implements IDownload<DownloadResult> {
     }
     HttpRequest.Builder httpBuilder = HttpRequest.newBuilder().uri(req.uri());
 
-    // 改用switch，抛弃反射
     switch (extraArgument.type()) {
       case GET -> httpBuilder.GET();
       case POST -> httpBuilder.POST(extraArgument.body());
-      default -> throw new DownloadException("不支持的请求方式：" + extraArgument.type());
+      default -> throw new DownloadException("Unsupported request method: " + extraArgument.type());
     }
 
     for (DownloadExtraArgument.DownloadHead head : extraArgument.heads()) {
@@ -51,7 +77,7 @@ public class DownloadSync implements IDownload<DownloadResult> {
       HttpResponse<java.io.InputStream> resp =
           httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
       if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-        throw new DownloadException("请求失败，状态码：" + resp.statusCode());
+        throw new DownloadException("Request failed with status code: " + resp.statusCode());
       }
       try (java.io.InputStream in = resp.body();
           OutputStream out = Files.newOutputStream(req.target())) {
@@ -68,6 +94,12 @@ public class DownloadSync implements IDownload<DownloadResult> {
     }
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Equivalent to {@link #download(DownloadRequest, DownloadExtraArgument)} with a plain {@code
+   * GET}.
+   */
   @Override
   public DownloadResult download(DownloadRequest req) throws DownloadException {
     return download(req, null);

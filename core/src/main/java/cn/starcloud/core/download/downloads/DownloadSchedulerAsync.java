@@ -33,6 +33,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Batch downloader that spreads tasks over a fixed pool of worker threads.
+ *
+ * <p>Tasks are pushed first, then {@link #download()} starts the workers and returns immediately
+ * with a {@link DownloadHandler} the caller polls for progress. Nothing may be pushed after the run
+ * started: the pending counter is sized once, and a task appearing later would make the completion
+ * check report the run as finished while work is still queued.
+ *
+ * <p>Each task is written to a sibling {@code .part} file and only moved onto its target after the
+ * optional SHA-1 check passed, so a failed or interrupted transfer never leaves a corrupt file
+ * under the real name, and a retry can resume from whatever the {@code .part} file already holds.
+ */
 public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
   private static final Logger log = LoggerFactory.getLogger(DownloadSchedulerAsync.class);
   private static final int BUF_SIZE = 8192;
@@ -50,6 +62,14 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
   private ExecutorService workerPool;
   private volatile boolean started = false;
 
+  /**
+   * Creates a scheduler that builds its own client.
+   *
+   * @param maxConcurrency number of worker threads, also the number of parallel transfers
+   * @param timeoutMs per-request timeout in milliseconds, used both as connect and request timeout
+   * @param maxRetry retries per task before it is marked failed
+   * @param retryDelayMs pause between retries in milliseconds
+   */
   public DownloadSchedulerAsync(
       int maxConcurrency, int timeoutMs, int maxRetry, long retryDelayMs) {
     this(
@@ -60,6 +80,15 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
         HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMs)).build());
   }
 
+  /**
+   * Creates a scheduler that reuses an existing client.
+   *
+   * @param maxConcurrency number of worker threads, also the number of parallel transfers
+   * @param timeoutMs per-request timeout in milliseconds, applied to every request
+   * @param maxRetry retries per task before it is marked failed
+   * @param retryDelayMs pause between retries in milliseconds
+   * @param httpClient client to send requests with, typically shared with the rest of the launcher
+   */
   public DownloadSchedulerAsync(
       int maxConcurrency, int timeoutMs, int maxRetry, long retryDelayMs, HttpClient httpClient) {
     this.maxConcurrency = maxConcurrency;
@@ -69,10 +98,22 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     this.httpClient = httpClient;
   }
 
+  /**
+   * Queues a task built from a caller request.
+   *
+   * @param request what to download
+   * @throws IllegalStateException when the run already started
+   */
   public void pushTask(DownloadRequest request) {
     pushTask(DownloadTask.fromRequest(request));
   }
 
+  /**
+   * Queues an already built task.
+   *
+   * @param task the task to add
+   * @throws IllegalStateException when the run already started
+   */
   public void pushTask(DownloadTask task) {
     if (started) {
       throw new IllegalStateException("Scheduler already started, cannot push new task");
@@ -81,10 +122,22 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     pendingQueue.offer(task);
   }
 
+  /**
+   * Queues every request, converted to a task.
+   *
+   * @param requests what to download
+   * @throws IllegalStateException when the run already started
+   */
   public void pushTasksForRequest(List<DownloadRequest> requests) {
     pushTasks(requests.stream().map(DownloadTask::fromRequest).toList());
   }
 
+  /**
+   * Queues already built tasks.
+   *
+   * @param tasks the tasks to add
+   * @throws IllegalStateException when the run already started
+   */
   public void pushTasks(List<DownloadTask> tasks) {
     if (started) {
       throw new IllegalStateException("Scheduler already started, cannot push new task");
@@ -93,6 +146,15 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     tasks.forEach(pendingQueue::offer);
   }
 
+  /**
+   * {@inheritDoc}
+   *
+   * <p>Starts the workers and returns at once; the transfers keep running on the pool.
+   *
+   * @param req must be {@code null}: tasks carry their own source, and accepting a request here
+   *     would silently mix a single download into a batch run
+   * @throws DownloadException when {@code req} is not {@code null} or the run already started
+   */
   @Override
   public DownloadHandler download(DownloadRequest req) throws DownloadException {
     if (req != null) {
@@ -116,10 +178,22 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     return handler;
   }
 
+  /**
+   * Starts the run for the tasks pushed earlier.
+   *
+   * @return handle reporting batch progress
+   * @throws DownloadException when the run already started
+   */
   public DownloadHandler download() throws DownloadException {
     return download(null);
   }
 
+  /**
+   * Body of one worker thread: drain the queue, then exit once no task is left.
+   *
+   * <p>Idle workers poll with a timeout instead of blocking forever so they can still notice that
+   * the remaining tasks were all taken by other workers and terminate.
+   */
   private void workerLoop(DownloadHandler handler) {
     try {
       while (true) {
@@ -146,9 +220,9 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
               retryDelayMs);
         } catch (Exception e) {
           fillFailed(task, e.getMessage() == null ? e.toString() : e.getMessage());
-        } finally {
-          // finishOne 不在这里，放到 try/catch 之后，确保重试期间不递减
         }
+        // Decrementing inside the catch would let a retry sleep while the counter already dropped,
+        // so the run could be reported as finished before the last attempt returned.
         finishOne(handler);
       }
     } catch (InterruptedException e) {
@@ -159,6 +233,12 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     }
   }
 
+  /**
+   * Transfers one task, resuming from an existing {@code .part} file when possible.
+   *
+   * <p>Throws instead of setting the state so the caller can decide between a retry and a failure;
+   * cancellation is checked between buffers because an interrupt cannot stop the blocking read.
+   */
   private void processSingleTask(DownloadTask task, DownloadHandler handler) throws Exception {
     URI uri = URI.create(task.meta().url());
     Path targetPath = task.meta().savePath();
@@ -185,6 +265,9 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
         httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
     int code = resp.statusCode();
     if (existLen > 0) {
+      // A server that ignores Range answers with the whole payload; appending it to the partial
+      // file
+      // would corrupt the result, so the partial file is dropped and the next attempt starts over.
       if (code != 206) {
         Files.deleteIfExists(partPath);
         throw new IOException("Resume failed, server not support range, status=" + code);
@@ -204,6 +287,8 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
 
     MessageDigest sha1 = MessageDigest.getInstance("SHA-1");
     if (existLen > 0) {
+      // The checksum has to cover the whole payload, including the prefix that is already on disk
+      // and will not be received again.
       try (FileChannel ch = FileChannel.open(partPath, StandardOpenOption.READ)) {
         ByteBuffer buf = ByteBuffer.allocate(BUF_SIZE);
         long pos = 0;
@@ -260,6 +345,10 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     log.info("Download success: {}", targetPath);
   }
 
+  /**
+   * Marks a task as failed, unless it was cancelled meanwhile: cancellation wins because the caller
+   * asked for it before the failure surfaced.
+   */
   private void fillFailed(DownloadTask task, String msg) {
     if (task.getState() == TaskState.CANCELLED) {
       log.info("Download cancelled: {}", task.meta().savePath());
@@ -270,6 +359,11 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     log.error("Download failed: {}, msg={}", task.meta().savePath(), msg);
   }
 
+  /**
+   * Accounts for one finished task and closes the run when it was the last one.
+   *
+   * <p>Called exactly once per task, so the decrement matches the initial count.
+   */
   private void finishOne(DownloadHandler handler) {
     int remaining = pendingCount.decrementAndGet();
     if (remaining <= 0 && pendingQueue.isEmpty()) {
@@ -277,6 +371,7 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     }
   }
 
+  /** Marks the run done at most once, whichever worker observes the empty queue first. */
   private void checkAndMarkDone(DownloadHandler handler) {
     if (handler.isDone()) {
       return;
@@ -295,6 +390,15 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     return sb.toString();
   }
 
+  /**
+   * Runs {@code action}, retrying while the failure looks transient and the budget allows it.
+   *
+   * @param action work to run; must be safe to repeat
+   * @param maxRetry retries after the first attempt
+   * @param delayMs pause between attempts
+   * @return whatever the successful attempt returned
+   * @throws Exception the last failure, rethrown once retrying stops
+   */
   private <T> T runWithRetry(RetryableAction<T> action, int maxRetry, long delayMs)
       throws Exception {
     int attempt = 0;
@@ -313,6 +417,13 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     }
   }
 
+  /**
+   * Decides whether another attempt can succeed.
+   *
+   * <p>Classified from the message because the failures are raised as plain {@link IOException}
+   * deep in the transfer; errors the server owns (missing file, no permission, checksum mismatch)
+   * will repeat identically, so retrying them only delays the report.
+   */
   private boolean isRetryable(Exception e) {
     if (e instanceof InterruptedException) {
       return false;
@@ -330,23 +441,33 @@ public class DownloadSchedulerAsync implements IDownload<DownloadHandler> {
     return true;
   }
 
+  /** Lets the running workers finish their current task, then stops; queued tasks are dropped. */
   public void shutdown() {
     if (workerPool != null) {
       workerPool.shutdown();
     }
   }
 
+  /** Interrupts the workers immediately, leaving unfinished tasks in their current state. */
   public void shutdownNow() {
     if (workerPool != null) {
       workerPool.shutdownNow();
     }
   }
 
+  /** Unit of work that may be retried. */
   @FunctionalInterface
   interface RetryableAction<T> {
+    /**
+     * Runs the work.
+     *
+     * @return the work's result
+     * @throws Exception when the attempt failed
+     */
     T run() throws Exception;
   }
 
+  /** Names worker threads so a thread dump shows which pool they belong to. */
   static class WorkerThreadFactory implements ThreadFactory {
     private final AtomicInteger seq = new AtomicInteger(0);
 

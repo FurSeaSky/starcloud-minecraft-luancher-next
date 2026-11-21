@@ -62,7 +62,7 @@ class MicrosoftAuthTest {
                   sent.add(req);
                   Step step = pick(req.uri().toString());
                   if (step == null) {
-                    throw new IllegalStateException("无匹配响应规则: " + req.uri());
+                    throw new IllegalStateException("No matching response rule for: " + req.uri());
                   }
                   HttpResponse<String> resp = mock(HttpResponse.class);
                   when(resp.statusCode()).thenReturn(step.status());
@@ -112,7 +112,8 @@ class MicrosoftAuthTest {
       return sent.stream()
           .filter(r -> r.uri().toString().contains(uriContains))
           .findFirst()
-          .orElseThrow(() -> new AssertionError("未发送匹配请求: " + uriContains));
+          .orElseThrow(
+              () -> new AssertionError("No matching request was sent for: " + uriContains));
     }
   }
 
@@ -175,7 +176,7 @@ class MicrosoftAuthTest {
       if (s instanceof AuthState.Success || s instanceof AuthState.Failed) return s;
       Thread.sleep(20);
     }
-    throw new AssertionError("等待终端态超时，当前: " + handle.state());
+    throw new AssertionError("Timed out waiting for a terminal state, current: " + handle.state());
   }
 
   private MockHttp http;
@@ -205,7 +206,7 @@ class MicrosoftAuthTest {
   }
 
   private static void assertFailed(AuthState s, AuthFailureReason reason) {
-    assertInstanceOf(AuthState.Failed.class, s, "期望 Failed，实际: " + s);
+    assertInstanceOf(AuthState.Failed.class, s, "expected Failed but was: " + s);
     assertEquals(reason, ((AuthState.Failed) s).reason());
   }
 
@@ -227,7 +228,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("clientId 为空 → INVALID_CLIENT_ID，零 HTTP 请求")
+  @DisplayName("blank clientId -> INVALID_CLIENT_ID, zero HTTP requests")
   void emptyClientIdFailsFast() throws Exception {
     MicrosoftAuth auth = newAuth("", true);
     assertFailed(awaitTerminal(auth.login(), 30), AuthFailureReason.INVALID_CLIENT_ID);
@@ -235,7 +236,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("clientId 为 null → INVALID_CLIENT_ID")
+  @DisplayName("null clientId -> INVALID_CLIENT_ID")
   void nullClientIdFailsFast() throws Exception {
     MicrosoftAuth auth = new MicrosoftAuth();
     assertFailed(awaitTerminal(auth.login(), 30), AuthFailureReason.INVALID_CLIENT_ID);
@@ -243,7 +244,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("refresh 未实现 → AuthException")
+  @DisplayName("refresh not implemented -> AuthException")
   void refreshThrows() {
     MicrosoftAuth auth = newAuth("cid", true);
     AuthException ex = assertThrows(AuthException.class, () -> auth.refresh("rt"));
@@ -251,14 +252,14 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("logout 是 no-op")
+  @DisplayName("logout is a no-op")
   void logoutNoOp() {
     MicrosoftAuth auth = newAuth("cid", true);
     assertDoesNotThrow(() -> auth.logout("token"));
   }
 
   @Test
-  @DisplayName("设备码非 200 → INVALID_CLIENT_ID")
+  @DisplayName("device code non-200 -> INVALID_CLIENT_ID")
   void deviceCodeNon200() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(400, Json.error("invalid_client"));
@@ -266,7 +267,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("设备码非法 JSON → INVALID_CREDENTIALS")
+  @DisplayName("device code malformed JSON -> INVALID_CREDENTIALS")
   void deviceCodeBadJson() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, "not-json{");
@@ -274,7 +275,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("设备码字段缺失 → INVALID_CREDENTIALS")
+  @DisplayName("device code fields missing -> INVALID_CREDENTIALS")
   void deviceCodeMissingFields() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, "{\"device_code\":\"dc\"}");
@@ -282,7 +283,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("设备码成功 → 首个请求打到设备码端点")
+  @DisplayName("device code succeeds -> first request hits the device code endpoint")
   void deviceCodeEmitsWaiting() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubFullSuccessChain("ms-at", "ms-rt", "xbl", "uhs", "xsts", "mc-at", "uuid", "Alex");
@@ -291,7 +292,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("authorization_pending ×2 后成功")
+  @DisplayName("authorization_pending twice, then success")
   void pendingThenSuccess() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, Json.deviceCode("dc", "uc", 1, 900));
@@ -306,7 +307,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("slow_down 后 interval+5，最终成功（耗时 >=7s）")
+  @DisplayName("slow_down adds 5s to the interval, flow still succeeds (>= 7s)")
   void slowDownThenSuccess() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, Json.deviceCode("dc", "uc", 1, 900));
@@ -321,7 +322,7 @@ class MicrosoftAuthTest {
     AuthState s = awaitTerminal(auth.login(), 30);
     long ms = (System.nanoTime() - t0) / 1_000_000;
     assertInstanceOf(AuthState.Success.class, s);
-    assertTrue(ms >= 7000, "slow_down 后应 >=7s，实际 " + ms + "ms");
+    assertTrue(ms >= 7000, "after slow_down the flow needs >= 7000ms but took " + ms + "ms");
   }
 
   @Test
@@ -343,7 +344,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("轮询成功但缺 access_token → INVALID_CREDENTIALS")
+  @DisplayName("poll succeeds but access_token is missing -> INVALID_CREDENTIALS")
   void tokenMissingAccessToken() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, Json.deviceCode("dc", "uc", 1, 900));
@@ -352,7 +353,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("XBL 缺 uhs → INVALID_CREDENTIALS")
+  @DisplayName("XBL response without uhs -> INVALID_CREDENTIALS")
   void xblMissingUhs() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, Json.deviceCode("dc", "uc", 1, 900));
@@ -362,7 +363,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("XSTS 非 200 → INVALID_CREDENTIALS")
+  @DisplayName("XSTS non-200 -> INVALID_CREDENTIALS")
   void xstsNon200() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, Json.deviceCode("dc", "uc", 1, 900));
@@ -373,7 +374,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("MC 登录缺 access_token → INVALID_CREDENTIALS")
+  @DisplayName("MC login without access_token -> INVALID_CREDENTIALS")
   void mcLoginMissingToken() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, Json.deviceCode("dc", "uc", 1, 900));
@@ -385,7 +386,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("Profile 缺 name → INVALID_CREDENTIALS")
+  @DisplayName("profile without name -> INVALID_CREDENTIALS")
   void profileMissingName() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubDeviceCode(200, Json.deviceCode("dc", "uc", 1, 900));
@@ -398,14 +399,14 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("完整流程 → Success，Session 字段正确")
+  @DisplayName("full flow -> Success with the expected session fields")
   void fullSuccessSession() throws Exception {
     MicrosoftAuth auth = newAuth("cid", true);
     stubFullSuccessChain(
         "ms-at", "ms-refresh", "xbl-tok", "UHS-1", "xsts-tok", "mc-access", "uuid-abc", "Notch");
 
     AuthState s = awaitTerminal(auth.login(), 30);
-    assertInstanceOf(AuthState.Success.class, s, "实际: " + s);
+    assertInstanceOf(AuthState.Success.class, s, "actual: " + s);
     AuthSession session = ((AuthState.Success) s).session();
     assertEquals("Notch", session.username());
     assertEquals("uuid-abc", session.uuid());
@@ -420,7 +421,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("modern 模式使用 modern 端点")
+  @DisplayName("modern mode uses the modern endpoints")
   void modernModeUsesModernUrls() throws Exception {
     MicrosoftAuth auth = newAuth("cid", false);
     stubFullSuccessChain("a", "r", "x", "u", "y", "m", "id", "n");
@@ -429,7 +430,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("parseError 解析正确 / 非法返回 null")
+  @DisplayName("parseError parses correctly and returns null on invalid input")
   void parseErrorDirect() {
     assertEquals(
         "authorization_pending", MicrosoftAuth.parseError(Json.error("authorization_pending")));
@@ -438,7 +439,7 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("parseTokenSuccess 正常 + 缺 access_token 抛 AbortFlow")
+  @DisplayName("parseTokenSuccess succeeds; a missing access_token throws AbortFlow")
   void parseTokenSuccessDirect() {
     MicrosoftAuth auth = newAuth("cid", true);
     DefaultAuthHandle h = new DefaultAuthHandle();
@@ -452,11 +453,11 @@ class MicrosoftAuthTest {
   }
 
   @Test
-  @DisplayName("HITL：真实设备码登录（需手动在浏览器授权）")
+  @DisplayName("HITL: real device code login (authorize manually in a browser)")
   void hitlRealLogin() throws Exception {
     String clientId = System.getProperty("hitl.clientId");
     if (clientId == null || clientId.isBlank()) {
-      clientId = prompt("请输入 Microsoft OAuth clientId: ");
+      clientId = prompt("Enter the Microsoft OAuth clientId: ");
     }
     boolean legacy = !"false".equalsIgnoreCase(System.getProperty("hitl.legacy", "true"));
     String finalClientId = clientId.trim();
@@ -464,8 +465,8 @@ class MicrosoftAuthTest {
   }
 
   public static void main(String[] args) throws Exception {
-    String clientId = prompt("请输入 Microsoft OAuth clientId: ");
-    String mode = prompt("使用哪种模式？(1=legacy, 2=modern，默认1): ");
+    String clientId = prompt("Enter the Microsoft OAuth clientId: ");
+    String mode = prompt("Which mode? (1=legacy, 2=modern, default 1): ");
     boolean legacy = !"2".equals(mode.trim());
     runHitl(clientId.trim(), legacy, 300);
     System.exit(0);
@@ -477,10 +478,10 @@ class MicrosoftAuthTest {
     auth.setClientID(clientId);
     auth.setLegacy(legacy);
 
-    System.out.println("========== HITL 真实登录 ==========");
+    System.out.println("========== HITL real login ==========");
     System.out.println("clientId = " + clientId);
     System.out.println("mode     = " + (legacy ? "legacy" : "modern"));
-    System.out.println("超时     = " + timeoutSec + "s");
+    System.out.println("timeout  = " + timeoutSec + "s");
     System.out.println("-----------------------------------");
 
     long t0 = System.currentTimeMillis();
@@ -503,7 +504,7 @@ class MicrosoftAuthTest {
     }
 
     if (last == null || !(last instanceof AuthState.Success || last instanceof AuthState.Failed)) {
-      System.out.println("!! 超时未完成，当前状态: " + handle.state());
+      System.out.println("!! timed out, current state: " + handle.state());
       handle.cancel();
       return;
     }
@@ -511,7 +512,7 @@ class MicrosoftAuthTest {
     System.out.println("===================================");
     if (last instanceof AuthState.Success ok) {
       AuthSession s = ok.session();
-      System.out.println("✅ 登录成功");
+      System.out.println("login succeeded");
       System.out.println("  username    = " + s.username());
       System.out.println("  uuid        = " + s.uuid());
       System.out.println("  expitesAt   = " + s.expitesAt());
@@ -519,26 +520,26 @@ class MicrosoftAuthTest {
       System.out.println("  refreshToken= " + mask(s.refreshToken()));
     } else {
       AuthState.Failed f = (AuthState.Failed) last;
-      System.out.println("❌ 登录失败");
+      System.out.println("login failed");
       System.out.println("  reason  = " + f.reason());
       System.out.println("  message = " + (f.error() == null ? null : f.error()));
       if (f.cause() != null) {
         f.cause().printStackTrace(System.out);
       }
     }
-    System.out.println("总耗时: " + (System.currentTimeMillis() - t0) + "ms");
+    System.out.println("total elapsed: " + (System.currentTimeMillis() - t0) + "ms");
   }
 
   private static void printState(AuthState s, long elapsedMs) {
     String prefix = "[" + elapsedMs + "ms] ";
     if (s == null) {
-      System.out.println(prefix + "状态: null");
+      System.out.println(prefix + "state: null");
     } else if (s instanceof AuthState.WaitingForUser w) {
       System.out.println(prefix + "⏳ WaitingForUser");
       System.out.println("  message         = " + w.instruction());
       System.out.println("  verificationUri = " + w.url());
       System.out.println("  userCode        = " + w.code());
-      System.out.println("  >>> 请在浏览器打开上面的 URI，输入 userCode 完成授权 <<<");
+      System.out.println("  >>> open the URI above in a browser and enter the userCode <<<");
     } else if (s instanceof AuthState.Success ok) {
       System.out.println(prefix + "✅ Success");
       System.out.println(
@@ -546,7 +547,7 @@ class MicrosoftAuthTest {
     } else if (s instanceof AuthState.Failed f) {
       System.out.println(prefix + "❌ Failed reason=" + f.reason());
     } else {
-      System.out.println(prefix + "状态: " + s);
+      System.out.println(prefix + "state: " + s);
     }
   }
 
