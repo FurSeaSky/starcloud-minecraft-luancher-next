@@ -121,13 +121,13 @@ public class MicrosoftAuth implements IAuth {
    * Refresh Microsoft authentication session using an existing refresh token.
    *
    * <p>This path does not require user interaction. It exchanges the refresh token for a new
-   * Microsoft access token, then re-runs the XBL -> XSTS -> Minecraft token chain and fetches
-   * the player profile. A new refresh token will be returned; the old one becomes invalid.
+   * Microsoft access token, then re-runs the XBL -> XSTS -> Minecraft token chain and fetches the
+   * player profile. A new refresh token will be returned; the old one becomes invalid.
    *
    * @param refreshToken valid refresh token obtained from a previous successful login
    * @return a fresh {@link AuthSession} with new access token and new refresh token
-   * @throws AuthException if clientId is missing, network fails, token is invalid/expired,
-   *                       or any step in the Xbox/Minecraft exchange rejects the request
+   * @throws AuthException if clientId is missing, network fails, token is invalid/expired, or any
+   *     step in the Xbox/Minecraft exchange rejects the request
    */
   @Override
   public AuthSession refresh(String refreshToken) throws AuthException {
@@ -144,13 +144,13 @@ public class MicrosoftAuth implements IAuth {
       MinecraftProfileJson profile = fetchProfile(handle, mcToken.accessToken());
 
       Instant expiresAt = Instant.now().plusSeconds(mcToken.expiresIn());
-      AuthSession session = new AuthSession(
-          profile.name(),
-          profile.id(),
-          mcToken.accessToken(),
-          msToken.refreshToken(),
-          expiresAt
-      );
+      AuthSession session =
+          new AuthSession(
+              profile.name(),
+              profile.id(),
+              mcToken.accessToken(),
+              msToken.refreshToken(),
+              expiresAt);
       LOG.info("Refresh success, username={}, uuid={}", profile.name(), profile.id());
       return session;
     } catch (AbortFlow ignored) {
@@ -175,20 +175,26 @@ public class MicrosoftAuth implements IAuth {
    * @return parsed token response containing new access_token and refresh_token
    * @throws AbortFlow on network error, interrupt, non-200 status or invalid response
    */
-  private TokenSuccessJson refreshMicrosoftToken(DefaultAuthHandle handle, String refreshToken) throws AbortFlow {
+  private TokenSuccessJson refreshMicrosoftToken(DefaultAuthHandle handle, String refreshToken)
+      throws AbortFlow {
     String tokenUrl = isLegacy ? LEGACY_TOKEN_URL : MODERN_TOKEN_URL;
     String scope = isLegacy ? LEGACY_SCOPE : MODERN_SCOPE;
 
-    String body = "grant_type=refresh_token"
-        + "&client_id=" + encode(clientId)
-        + "&refresh_token=" + encode(refreshToken)
-        + "&scope=" + encode(scope);
+    String body =
+        "grant_type=refresh_token"
+            + "&client_id="
+            + encode(clientId)
+            + "&refresh_token="
+            + encode(refreshToken)
+            + "&scope="
+            + encode(scope);
 
-    HttpRequest req = HttpRequest.newBuilder()
-        .uri(URI.create(tokenUrl))
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .POST(HttpRequest.BodyPublishers.ofString(body))
-        .build();
+    HttpRequest req =
+        HttpRequest.newBuilder()
+            .uri(URI.create(tokenUrl))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
 
     HttpResponse<String> response;
     try {
@@ -200,14 +206,23 @@ public class MicrosoftAuth implements IAuth {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       LOG.info("Refresh interrupted");
-      handle.update(new AuthState.Failed(AuthFailureReason.CANCELLED, new AuthException("refresh interrupted", e)));
+      handle.update(
+          new AuthState.Failed(
+              AuthFailureReason.CANCELLED, new AuthException("refresh interrupted", e)));
       throw new AbortFlow();
     }
 
     if (response.statusCode() != 200) {
       String err = parseError(response.body());
-      LOG.warn("Refresh failed, status={}, error={}, body={}", response.statusCode(), err, response.body());
-      handle.update(new AuthState.Failed(AuthFailureReason.INVALID_CREDENTIALS, new AuthException("refresh token invalid: " + response.body())));
+      LOG.warn(
+          "Refresh failed, status={}, error={}, body={}",
+          response.statusCode(),
+          err,
+          response.body());
+      handle.update(
+          new AuthState.Failed(
+              AuthFailureReason.INVALID_CREDENTIALS,
+              new AuthException("refresh token invalid: " + response.body())));
       throw new AbortFlow();
     }
 
@@ -215,8 +230,8 @@ public class MicrosoftAuth implements IAuth {
   }
 
   /**
-   * Asynchronous refresh version, consistent with {@link #login()} style.
-   * Runs on a virtual thread and returns immediately with an observable handle.
+   * Asynchronous refresh version, consistent with {@link #login()} style. Runs on a virtual thread
+   * and returns immediately with an observable handle.
    *
    * @param refreshToken existing refresh token
    * @return {@link AuthHandle} tracking refresh progress or terminal state
@@ -224,17 +239,23 @@ public class MicrosoftAuth implements IAuth {
   public AuthHandle refreshAsync(String refreshToken) {
     DefaultAuthHandle handle = new DefaultAuthHandle();
     if (clientId == null || clientId.isEmpty()) {
-      handle.update(new AuthState.Failed(AuthFailureReason.INVALID_CLIENT_ID, new AuthException("clientId empty")));
+      handle.update(
+          new AuthState.Failed(
+              AuthFailureReason.INVALID_CLIENT_ID, new AuthException("clientId empty")));
       return handle;
     }
-    Thread worker = Thread.ofVirtual().name("ms-auth-refresh").start(() -> {
-      try {
-        AuthSession session = refresh(refreshToken);
-        handle.update(new AuthState.Success(session));
-      } catch (AuthException e) {
-        handle.update(new AuthState.Failed(AuthFailureReason.INVALID_CREDENTIALS, e));
-      }
-    });
+    Thread worker =
+        Thread.ofVirtual()
+            .name("ms-auth-refresh")
+            .start(
+                () -> {
+                  try {
+                    AuthSession session = refresh(refreshToken);
+                    handle.update(new AuthState.Success(session));
+                  } catch (AuthException e) {
+                    handle.update(new AuthState.Failed(AuthFailureReason.INVALID_CREDENTIALS, e));
+                  }
+                });
     handle.setWorker(worker);
     return handle;
   }

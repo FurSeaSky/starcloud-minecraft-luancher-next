@@ -27,9 +27,7 @@ public class LauncherCore implements ILauncherCore {
   private LauncherCore() {}
 
   public boolean CheckMinecraftDir() {
-    return Files.isDirectory(assets)
-        && Files.isDirectory(libraries)
-        && Files.isDirectory(versions);
+    return Files.isDirectory(assets) && Files.isDirectory(libraries) && Files.isDirectory(versions);
   }
 
   public boolean ReBuildMinecraftDir() throws InitException {
@@ -44,6 +42,7 @@ public class LauncherCore implements ILauncherCore {
     }
     return CheckMinecraftDir();
   }
+
   /**
    * Selects which download source to use.
    *
@@ -89,7 +88,7 @@ public class LauncherCore implements ILauncherCore {
         throw new InitException("Create base directory failed: " + LauncherCoreConsts.BASE, e);
       }
     }
-    if(!CheckMinecraftDir()){
+    if (!CheckMinecraftDir()) {
       if (!ReBuildMinecraftDir()) {
         throw new InitException("Minecraft基础目录初始化失败，无法继续启动");
       }

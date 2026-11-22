@@ -497,7 +497,6 @@ class MicrosoftAuthTest {
     assertInstanceOf(AuthState.Failed.class, h2.state());
   }
 
-
   void hitlRealRefresh() throws Exception {
     String clientId = System.getProperty("hitl.clientId");
     if (clientId == null || clientId.isBlank()) {
@@ -516,7 +515,8 @@ class MicrosoftAuthTest {
     runHitlRefresh(finalClientId, finalRt, legacy, 300);
   }
 
-  static void runHitlRefresh(String clientId, String refreshToken, boolean legacy, long timeoutSec) throws Exception {
+  static void runHitlRefresh(String clientId, String refreshToken, boolean legacy, long timeoutSec)
+      throws Exception {
     MicrosoftAuth.setHttpClientForTest(null);
     MicrosoftAuth auth = new MicrosoftAuth();
     auth.setClientID(clientId);
@@ -574,7 +574,6 @@ class MicrosoftAuthTest {
     System.out.println("total elapsed: " + (System.currentTimeMillis() - t0) + "ms");
   }
 
-
   @Test
   @DisplayName("HITL: real device code login (authorize manually in a browser)")
   void hitlRealLogin() throws Exception {
@@ -592,7 +591,11 @@ class MicrosoftAuthTest {
     String mode = prompt("Which mode? (1=legacy, 2=modern, default 1): ");
     boolean legacy = !"2".equals(mode.trim());
     runHitl(clientId.trim(), legacy, 300);
-    runHitlRefresh(clientId.trim(),"M.C516_SN1.0.U.MsaArtifacts.-Cth3afMqYY2xoqHQWC28Urk8lbsguLfmDXrkJ0WYmVlEfhecW9n92rbddyikFvqJ0FJD5X9MaXqyulG70euzaHUzTQAZXxKf8UyTysIgWEx7Zj6sZfs8!UEPgwVm3nlDLUm7YKNWW6fprasB8N5qBey5gT3dowUqNDiLTLHP3JHwbfYXVDOak7VpH4FF1i1fvls1vrXLRYqf9O3dZtibBJywG*LvOpa3a8PJzyaXeARNqFoGJKNg!xIyZQKx336f8uj9RYVcMhaqONtjoYlxS2e7W4DcZXUU3gASAkIk5cUN",true,10);
+    runHitlRefresh(
+        clientId.trim(),
+        "M.C516_SN1.0.U.MsaArtifacts.-Cth3afMqYY2xoqHQWC28Urk8lbsguLfmDXrkJ0WYmVlEfhecW9n92rbddyikFvqJ0FJD5X9MaXqyulG70euzaHUzTQAZXxKf8UyTysIgWEx7Zj6sZfs8!UEPgwVm3nlDLUm7YKNWW6fprasB8N5qBey5gT3dowUqNDiLTLHP3JHwbfYXVDOak7VpH4FF1i1fvls1vrXLRYqf9O3dZtibBJywG*LvOpa3a8PJzyaXeARNqFoGJKNg!xIyZQKx336f8uj9RYVcMhaqONtjoYlxS2e7W4DcZXUU3gASAkIk5cUN",
+        true,
+        10);
     System.exit(0);
   }
 
