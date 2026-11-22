@@ -42,7 +42,7 @@ class DownloadSchedulerAsyncTest {
     server.stop(0);
   }
 
-  // ---------- 1. 基础下载 + SHA-1 ----------
+  // ---------- 1. plain download and SHA-1 verification ----------
 
   @Test
   void downloadsSingleFileAndVerifiesSha1() throws Exception {
@@ -136,7 +136,7 @@ class DownloadSchedulerAsyncTest {
     assertEquals(content.length, lastReceived.get());
   }
 
-  // ---------- 2. 失败与重试 ----------
+  // ---------- 2. failures and retries ----------
 
   @Test
   void sha1MismatchFails() throws Exception {
@@ -218,7 +218,7 @@ class DownloadSchedulerAsyncTest {
     assertEquals("ok", Files.readString(target));
   }
 
-  // ---------- 3. 取消 ----------
+  // ---------- 3. cancellation ----------
 
   @Test
   void cancelBeforeStartSkipsTask() throws Exception {
@@ -243,7 +243,7 @@ class DownloadSchedulerAsyncTest {
 
   @Test
   void cancelDuringDownloadInterruptsAndKeepsCancelledState() throws Exception {
-    // 慢响应：分块写，每块间隔 50ms，让 cancel 有时间插入
+    // Slow response: write chunk by chunk with a 50ms gap so cancel can land mid-transfer.
     server.createContext(
         "/slow",
         ex -> {
@@ -271,7 +271,7 @@ class DownloadSchedulerAsyncTest {
     scheduler.pushTask(task);
     DownloadHandler handler = scheduler.download();
 
-    // 等任务进入 RUNNING
+    // Wait until the task reached RUNNING.
     waitUntil(() -> task.getState() == TaskState.RUNNING, 2000);
 
     task.cancel();
@@ -284,7 +284,7 @@ class DownloadSchedulerAsyncTest {
     assertTrue(handler.getFailedTasks().isEmpty(), "cancelled task must not be marked FAILED");
   }
 
-  // ---------- 辅助 ----------
+  // ---------- helpers ----------
 
   private static void respond(HttpExchange ex, int status, byte[] body) throws IOException {
     ex.sendResponseHeaders(status, body.length);

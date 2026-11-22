@@ -14,7 +14,7 @@ class VersionTest {
   void getVersionList() {
     Version v = new Version();
     var a = v.getVersionList();
-    logger.info("版本列表数量：{}", a.size());
+    logger.info("Version count: {}", a.size());
     for (VersionManifestEntry vme : a) {
       logger.info("{}", vme);
     }

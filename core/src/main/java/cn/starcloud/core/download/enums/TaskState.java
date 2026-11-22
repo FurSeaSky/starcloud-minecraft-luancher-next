@@ -1,9 +1,21 @@
 package cn.starcloud.core.download.enums;
 
+/**
+ * Lifecycle of a single download task.
+ *
+ * <p>{@link #SUCCESS}, {@link #FAILED} and {@link #CANCELLED} are terminal: once a task reaches one
+ * of them it is never moved again, which is what lets the scheduler count completions and report
+ * results after the workers have drained.
+ */
 public enum TaskState {
-  PENDING, // 在队列等待分配连接
-  RUNNING, // 正在传输
-  SUCCESS, // 下载+sha1校验通过
-  FAILED, // 网络/解析/校验/超时失败
-  CANCELLED // 被取消
+  /** Queued, waiting for a worker thread. */
+  PENDING,
+  /** Worker owns the task and is transferring bytes into the {@code .part} file. */
+  RUNNING,
+  /** Payload written and, when the request carried one, the SHA-1 checksum matched. */
+  SUCCESS,
+  /** Network, parsing, checksum or timeout failure. */
+  FAILED,
+  /** Cancelled by the caller before it reached a terminal state. */
+  CANCELLED
 }

@@ -23,6 +23,12 @@ public class LauncherCore implements ILauncherCore {
 
   private LauncherCore() {}
 
+  /**
+   * Selects which download source to use.
+   *
+   * @param isMirror {@code true} for the BMCLAPI mirror, {@code false} for Mojang's official
+   *     endpoints
+   */
   public void setMirror(boolean isMirror) {
     this.isMirror = isMirror;
   }
@@ -105,6 +111,11 @@ public class LauncherCore implements ILauncherCore {
     currentMinecraftGameDir = dir;
   }
 
+  /**
+   * Returns whether downloads currently go through the mirror.
+   *
+   * @return {@code true} when the BMCLAPI mirror is selected
+   */
   public boolean getIsMirror() {
     return isMirror;
   }
