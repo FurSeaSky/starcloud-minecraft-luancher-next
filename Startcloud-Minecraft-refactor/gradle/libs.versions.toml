@@ -1,0 +1,20 @@
+[versions]
+gson = "2.11.0"
+junit = "5.10.2"
+kotlin = "2.0.21"
+compose = "1.7.3"
+composePlugin = "1.7.3"
+coroutines = "1.9.0"
+logback = "1.5.6"
+
+[libraries]
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version = "1.10.2" }
+kotlinx-coroutines-swing = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-swing", version.ref = "coroutines" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose = { id = "org.jetbrains.compose", version.ref = "composePlugin" }
