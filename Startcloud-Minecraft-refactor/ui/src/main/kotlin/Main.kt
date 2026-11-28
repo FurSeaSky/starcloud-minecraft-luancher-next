@@ -20,86 +20,53 @@ fun init() {
     )
 }
 
-// 简单路由标记
-sealed interface Config {
-    data object Home : Config
-    data object Settings : Config
-}
-
-// 根Component
-class RootComponent(ctx: ComponentContext) : ComponentContext by ctx
 
 @Composable
 fun AppLayout() {
     Column(modifier = Modifier.fillMaxSize()) {
-        // Header 顶部通栏
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.primaryContainer
         ) {
-            Text(
-                "Starcloud Launcher",
-                modifier = Modifier.padding(14.dp),
-                style = MaterialTheme.typography.headlineSmall
-            )
+            Card3s
         }
-
-        // 中间一行：左固定面板 + 右侧操作区
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
-            // 左侧主面板（固定宽）
             Surface(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .width(280.dp),
+                    .weight(5f),
                 color = MaterialTheme.colorScheme.surfaceVariant
             ) {
-                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("左侧面板", style = MaterialTheme.typography.titleMedium)
-                    Button(onClick = {}) { Text("首页") }
-                    Button(onClick = {}) { Text("设置") }
-                }
             }
-
-            // 右侧：路由出口（以后放 Decompose ChildStack）
             Surface(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .weight(1f),
+                    .fillMaxWidth()
+                    .weight(2f),
                 color = MaterialTheme.colorScheme.surface
             ) {
-                Column(Modifier.padding(16.dp)) {
-                    Text("右侧操作区（路由切换在这里）", style = MaterialTheme.typography.titleMedium)
-                    Text("页面内容在这里替换")
-                }
+
             }
         }
-
-        // Footer 底部状态栏
         Surface(
             modifier = Modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.secondaryContainer
         ) {
-            Text(
-                "就绪 · Starcloud Minecraft Launcher",
-                modifier = Modifier.padding(10.dp),
-                style = MaterialTheme.typography.bodySmall
-            )
         }
     }
 }
 
 fun main() = application {
     init()
-    val windowState = rememberWindowState(size = DpSize(1100.dp, 700.dp))
 
     Window(
         onCloseRequest = ::exitApplication,
         title = "Starcloud Launcher",
-        state = windowState,
+        state = rememberWindowState(size = DpSize(10000.dp, 8000.dp)),
     ) {
         MaterialTheme(
             typography = Typography().withFont(StarcloudFontFamily()),
